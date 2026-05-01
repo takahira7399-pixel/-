@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="回転数計算">
+<meta name="theme-color" content="#1a1a1a">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>回転数計算</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  html, body { height: 100%; overflow: hidden; }
+  body { font-family: -apple-system, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif; background: #f2f1ed; display: flex; flex-direction: column; }
+
+  /* ── タブバー（上部） ── */
+  .tab-bar { display: flex; background: #fff; border-bottom: 0.5px solid #e0e0e0; flex-shrink: 0; padding-top: env(safe-area-inset-top); }
+  .tab { flex: 1; padding: 14px 0 12px; font-size: 13px; font-weight: 600; text-align: center; color: #aaa; cursor: pointer; border: none; background: transparent; border-bottom: 2px solid transparent; }
+  .tab.active { color: #1a1a1a; border-bottom-color: #1a1a1a; }
+
+  /* ── スクロールエリア ── */
+  .screen { display: none; flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); }
+  .screen.active { display: block; }
+
+  /* ── サマリー ── */
+  .summary { background: #1a1a1a; border-radius: 16px; padding: 10px 14px; margin-bottom: 10px; color: #fff; display: flex; align-items: center; gap: 12px; }
+  .avg-block { flex-shrink: 0; border-right: 0.5px solid #333; padding-right: 12px; }
+  .avg-label { font-size: 10px; color: #888; letter-spacing: 0.04em; margin-bottom: 1px; }
+  .avg-value { font-size: 42px; font-weight: 700; line-height: 1; letter-spacing: -0.03em; }
+  .avg-value.empty { color: #444; }
+  .avg-unit { font-size: 10px; color: #666; margin-top: 1px; }
+  .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; flex: 1; }
+  .stat { background: #2a2a2a; border-radius: 8px; padding: 5px 8px; }
+  .st-label { font-size: 9px; color: #666; margin-bottom: 1px; }
+  .st-val { font-size: 13px; font-weight: 600; color: #fff; }
+
+  /* ── 入力カード ── */
+  .input-card { background: #fff; border-radius: 16px; padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+
+  .mode-switch { display: flex; background: #f2f1ed; border-radius: 10px; padding: 3px; margin-bottom: 8px; gap: 3px; }
+  .mode-btn { flex: 1; padding: 7px 0; font-size: 13px; font-weight: 600; text-align: center; cursor: pointer; border: none; background: transparent; color: #999; border-radius: 8px; }
+  .mode-btn.active-cash { background: #fff; color: #1a6fd4; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .mode-btn.active-ball { background: #fff; color: #0f8f60; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+  .card-hint { font-size: 11px; color: #999; margin-bottom: 5px; line-height: 1.4; min-height: 28px; }
+
+  .display { display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; padding: 8px 12px; border-radius: 12px; background: #f7f6f3; margin-bottom: 5px; }
+  .display-val { font-size: 40px; font-weight: 700; color: #1a1a1a; letter-spacing: -0.03em; }
+  .display-unit { font-size: 13px; color: #aaa; }
+
+  .diff-row { display: flex; align-items: center; justify-content: flex-end; gap: 5px; padding: 5px 12px; border-radius: 10px; margin-bottom: 7px; min-height: 30px; visibility: hidden; }
+  .diff-row.cash { background: #e8f1fc; }
+  .diff-row.ball { background: #e0f5ec; }
+  .diff-label.cash { color: #1a6fd4; font-size: 12px; }
+  .diff-label.ball { color: #0f8f60; font-size: 12px; }
+  .diff-num.cash { color: #1a6fd4; font-size: 18px; font-weight: 700; }
+  .diff-num.ball { color: #0f8f60; font-size: 18px; font-weight: 700; }
+
+  .numpad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 7px; }
+  .nk {
+    font-size: 20px; font-weight: 500; padding: 17px 0; text-align: center;
+    border: none; border-radius: 10px; background: #f2f1ed; color: #1a1a1a;
+    cursor: pointer; -webkit-user-select: none; user-select: none;
+    display: block; width: 100%;
+  }
+  .nk:active { background: #dddcd8; }
+  .nk.del { font-size: 16px; color: #888; }
+  .nk.undo { font-size: 16px; color: #a07800; background: #fff8e0; transition: transform 0.1s, background 0.3s; }
+  .nk.undo:active { background: #ffe9a0; }
+  .nk.undo.disabled { color: #ccc; background: #f5f5f5; }
+  .nk.zero { grid-column: span 3; }
+
+  /* ── アクションボタン ── */
+  .action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .act-btn {
+    padding: 12px 0; font-size: 14px; font-weight: 600;
+    border-radius: 12px; cursor: pointer; border: none;
+    text-align: center; width: 100%;
+    -webkit-user-select: none; user-select: none; display: block;
+  }
+  .act-btn:active { opacity: 0.8; }
+  .act-btn.confirm-cash { background: #1a6fd4; color: #fff; }
+  .act-btn.confirm-ball { background: #0f8f60; color: #fff; }
+  .act-btn.hit { background: #d93b3b; color: #fff; }
+  .act-btn.start-cash { background: #1a6fd4; color: #fff; }
+  .act-btn.start-ball { background: #0f8f60; color: #fff; }
+
+  /* ── 履歴タブ ── */
+  .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .h-title { font-size: 14px; font-weight: 600; color: #333; }
+  .h-clear { font-size: 12px; padding: 5px 14px; border-radius: 20px; background: #fff; color: #aaa; cursor: pointer; border: 1px solid #e8e8e8; }
+
+
+  .seg-list { display: flex; flex-direction: column; gap: 7px; }
+  .seg-item { background: #fff; border-radius: 12px; padding: 11px 14px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+  .seg-badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; }
+  .badge-hit { background: #fde8e8; color: #c0392b; }
+  .badge-cash { background: #e8f1fc; color: #1a6fd4; }
+  .badge-ball { background: #e0f5ec; color: #0f8f60; }
+  .seg-body { flex: 1; min-width: 0; }
+  .seg-name { font-size: 14px; font-weight: 600; color: #1a1a1a; }
+  .seg-sub { font-size: 11px; color: #bbb; margin-top: 1px; }
+  .seg-diff { font-size: 18px; font-weight: 700; color: #1a1a1a; flex-shrink: 0; }
+  .seg-del { font-size: 20px; color: #ddd; cursor: pointer; margin-left: 2px; padding: 6px; flex-shrink: 0; }
+
+  .empty { font-size: 13px; color: #bbb; text-align: center; padding: 3rem 0; }
+
+  /* ── 設定タブ ── */
+  .settings-card { background: #fff; border-radius: 16px; padding: 1rem 1.1rem; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .set-title { font-size: 14px; font-weight: 600; color: #1a1a1a; margin-bottom: 4px; }
+  .set-desc { font-size: 12px; color: #aaa; margin-bottom: 12px; line-height: 1.4; }
+  .border-display { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; padding: 10px 12px; border-radius: 12px; background: #f7f6f3; margin-bottom: 10px; }
+  .border-disp-val { font-size: 40px; font-weight: 700; color: #1a1a1a; letter-spacing: -0.03em; }
+  .border-disp-unit { font-size: 14px; color: #aaa; }
+  .border-numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .bnk { font-size: 20px; font-weight: 500; padding: 14px 0; text-align: center; border: none; border-radius: 10px; background: #f2f1ed; color: #1a1a1a; cursor: pointer; -webkit-user-select: none; user-select: none; display: block; width: 100%; }
+  .bnk:active { background: #dddcd8; }
+  .bnk.del { font-size: 16px; color: #888; }
+  .bnk.dot { font-size: 24px; font-weight: 700; color: #555; }
+  .bnk.zero { }
+  .danger-btn { width: 100%; padding: 12px; border-radius: 12px; border: none; background: #fde8e8; color: #c0392b; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .danger-btn:active { opacity: 0.8; }
+
+  /* 平均回転数の色 */
+  .avg-value.empty { color: #444; }
+  .avg-value.avg-blue { color: #4da6ff; }
+  .avg-value.avg-green { color: #0f8f60; }
+  .avg-value.avg-red { color: #d93b3b; }
+  .avg-value.avg-gold {
+    background: linear-gradient(180deg, #fffbe0 0%, #f5d020 20%, #c8960c 40%, #fdeea3 55%, #b8860b 70%, #f5d020 85%, #7a5800 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .avg-value.avg-rainbow {
+    background: linear-gradient(180deg, #ff0000, #ff7700, #ffff00, #00cc00, #0000ff, #8b00ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+</style>
+</head>
+<body>
+
+<!-- タブバー -->
+<div class="tab-bar">
+  <button class="tab active" id="tabInput" >入力</button>
+  <button class="tab" id="tabHistory">履歴</button>
+  <button class="tab" id="tabSettings">設定</button>
+</div>
+
+<!-- 入力タブ -->
+<div class="screen active" id="screenInput">
+  <div class="summary">
+    <div class="avg-block">
+      <div class="avg-label">平均回転数</div>
+      <div class="avg-value empty" id="totalAvg">—</div>
+      <div class="avg-unit">回転/1,000円</div>
+    </div>
+    <div class="stats-row">
+      <div class="stat"><div class="st-label">現金投資</div><div class="st-val" id="stMoney">—</div></div>
+      <div class="stat"><div class="st-label">総回転数</div><div class="st-val" id="stKaiten">—</div></div>
+      <div class="stat"><div class="st-label">当たり</div><div class="st-val" id="stHit">0回</div></div>
+      <div class="stat"><div class="st-label">記録</div><div class="st-val" id="stSeg">0回</div></div>
+    </div>
+  </div>
+
+  <div class="input-card">
+    <div class="mode-switch">
+      <button class="mode-btn active-cash" id="btnCash">💴 現金</button>
+      <button class="mode-btn" id="btnBall">🎱 持ち球</button>
+    </div>
+    <div class="card-hint" id="cardHint">打ち始める前の回転数を入力</div>
+    <div class="display">
+      <div class="display-val" id="dispVal">0</div>
+      <div class="display-unit">回転</div>
+    </div>
+    <div class="diff-row cash" id="diffRow">
+      <span class="diff-label cash" id="diffLabel">この1,000円で</span>
+      <span class="diff-num cash" id="diffNum">0</span>
+      <span class="diff-label cash" id="diffUnit">回転</span>
+    </div>
+    <!-- テンキー: 4列 -->
+    <div class="numpad">
+      <button class="nk" data-n="7">7</button>
+      <button class="nk" data-n="8">8</button>
+      <button class="nk" data-n="9">9</button>
+      <button class="nk del" data-n="del">⌫</button>
+
+      <button class="nk" data-n="4">4</button>
+      <button class="nk" data-n="5">5</button>
+      <button class="nk" data-n="6">6</button>
+      <button class="nk undo disabled" id="undoBtn">↩</button>
+
+      <button class="nk" data-n="1">1</button>
+      <button class="nk" data-n="2">2</button>
+      <button class="nk" data-n="3">3</button>
+      <button class="nk" data-n="" style="visibility:hidden"></button>
+
+      <button class="nk zero" data-n="0">0</button>
+      <button class="nk" data-n="" style="visibility:hidden"></button>
+    </div>
+    <div id="actionArea"></div>
+  </div>
+</div>
+
+<!-- 履歴タブ -->
+<div class="screen" id="screenHistory">
+  <div class="history-header">
+    <span class="h-title" id="histTitle">記録履歴</span>
+    <button class="h-clear" id="clearBtn">全クリア</button>
+  </div>
+  <div class="seg-list" id="segList">
+    <div class="empty">記録がまだありません</div>
+  </div>
+</div>
+
+<script>
+var records = [];
+var undoStack = [];
+var prevKaiten = null;
+var current = '';
+var started = false;
+var mode = 'cash';
+var border = 17; // 目標ボーダー回転数
+
+/* ── localStorage 保存/読込 ── */
+function saveState() {
+  // セッション保存 無効中（有効にするには下のコメントを外す）
+  /*
+  try {
+    localStorage.setItem('pachinko_records', JSON.stringify(records));
+    localStorage.setItem('pachinko_prev', JSON.stringify(prevKaiten));
+    localStorage.setItem('pachinko_started', JSON.stringify(started));
+    localStorage.setItem('pachinko_mode', mode);
+    localStorage.setItem('pachinko_border', JSON.stringify(border));
+  } catch(e) {}
+  */
+}
+function loadState() {
+  // セッション保存 無効中（有効にするには下のコメントを外す）
+  /*
+  try {
+    var r = localStorage.getItem('pachinko_records');
+    if (r) records = JSON.parse(r);
+    var p = localStorage.getItem('pachinko_prev');
+    if (p) prevKaiten = JSON.parse(p);
+    var s = localStorage.getItem('pachinko_started');
+    if (s) started = JSON.parse(s);
+    var m = localStorage.getItem('pachinko_mode');
+    if (m) mode = m;
+    var b = localStorage.getItem('pachinko_border');
+    if (b) { border = JSON.parse(b); borderCurrent = String(border); }
+  } catch(e) {}
+  */
+}
+
+/* ── タッチ/クリック両対応 ── */
+function onTap(el, fn) {
+  var lastTime = 0;
+  function fire(e) {
+    var now = Date.now();
+    if (now - lastTime < 400) return;
+    lastTime = now;
+    e.preventDefault();
+    fn();
+  }
+  el.addEventListener('touchend', fire, { passive: false });
+  el.addEventListener('click', function(e) {
+    var now = Date.now();
+    if (now - lastTime < 400) return;
+    lastTime = now;
+    fn();
+  });
+}
+
+/* ── タブ切り替え ── */
+onTap(document.getElementById('tabInput'), function() { switchTab('input'); });
+onTap(document.getElementById('tabHistory'), function() { switchTab('history'); });
+onTap(document.getElementById('tabSettings'), function() { switchTab('settings'); });
+function switchTab(t) {
+  document.getElementById('tabInput').className = 'tab' + (t === 'input' ? ' active' : '');
+  document.getElementById('tabHistory').className = 'tab' + (t === 'history' ? ' active' : '');
+  document.getElementById('tabSettings').className = 'tab' + (t === 'settings' ? ' active' : '');
+  document.getElementById('screenInput').className = 'screen' + (t === 'input' ? ' active' : '');
+  document.getElementById('screenHistory').className = 'screen' + (t === 'history' ? ' active' : '');
+  document.getElementById('screenSettings').className = 'screen' + (t === 'settings' ? ' active' : '');
+}
+
+/* ── Undo ── */
+function saveSnapshot() {
+  undoStack.push({ records: JSON.parse(JSON.stringify(records)), prevKaiten: prevKaiten, started: started, mode: mode });
+  if (undoStack.length > 20) undoStack.shift();
+  updateUndoBtn();
+}
+function undoLast() {
+  if (undoStack.length === 0) return;
+  var snap = undoStack.pop();
+  records = snap.records;
+  prevKaiten = snap.prevKaiten;
+  started = snap.started;
+  mode = snap.mode;
+  current = '';
+  document.getElementById('btnCash').className = 'mode-btn' + (mode === 'cash' ? ' active-cash' : '');
+  document.getElementById('btnBall').className = 'mode-btn' + (mode === 'ball' ? ' active-ball' : '');
+  updateUndoBtn();
+  saveState();
+  renderAll();
+}
+function updateUndoBtn() {
+  var btn = document.getElementById('undoBtn');
+  if (undoStack.length > 0) {
+    btn.className = 'nk undo';
+  } else {
+    btn.className = 'nk undo disabled';
+  }
+}
+// ↩ボタンは0.5秒長押し
+(function() {
+  var btn = document.getElementById('undoBtn');
+  var timer = null;
+  var activated = false;
+  function startHold(e) {
+    activated = false;
+    timer = setTimeout(function() {
+      activated = true;
+      btn.style.transform = 'scale(0.93)';
+      undoLast();
+      setTimeout(function() { btn.style.transform = ''; }, 150);
+    }, 300);
+  }
+  function cancelHold() {
+    clearTimeout(timer);
+    btn.style.transform = '';
+  }
+  btn.addEventListener('touchstart', function(e) { e.preventDefault(); startHold(e); }, { passive: false });
+  btn.addEventListener('touchend', function(e) { e.preventDefault(); cancelHold(); }, { passive: false });
+  btn.addEventListener('touchcancel', cancelHold);
+  btn.addEventListener('mousedown', startHold);
+  btn.addEventListener('mouseup', cancelHold);
+  btn.addEventListener('mouseleave', cancelHold);
+})();
+
+/* ── テンキー（連打対応） ── */
+document.querySelectorAll('.nk[data-n]').forEach(function(btn) {
+  var n = btn.getAttribute('data-n');
+  if (n === '' || n === null) return;
+  var touched = false;
+  var cancelled = false;
+  var MARGIN = 16; // ボタン枠外何px離れたらキャンセルするか
+  btn.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    cancelled = false;
+  }, { passive: false });
+  btn.addEventListener('touchmove', function(e) {
+    var t = e.touches[0];
+    var r = btn.getBoundingClientRect();
+    if (t.clientX < r.left - MARGIN || t.clientX > r.right + MARGIN ||
+        t.clientY < r.top - MARGIN || t.clientY > r.bottom + MARGIN) {
+      cancelled = true;
+    }
+  }, { passive: false });
+  btn.addEventListener('touchend', function(e) {
+    e.preventDefault();
+    if (cancelled) return;
+    touched = true;
+    if (n === 'del') {
+      current = current.slice(0, -1);
+    } else {
+      if (current.length >= 5) return;
+      if (current === '0') current = '';
+      current += n;
+    }
+    renderInput();
+  }, { passive: false });
+  btn.addEventListener('click', function() {
+    if (touched) { touched = false; return; }
+    if (n === 'del') {
+      current = current.slice(0, -1);
+    } else {
+      if (current.length >= 5) return;
+      if (current === '0') current = '';
+      current += n;
+    }
+    renderInput();
+  });
+});
+
+/* ── モード ── */
+onTap(document.getElementById('btnCash'), function() { setMode('cash'); });
+onTap(document.getElementById('btnBall'), function() { setMode('ball'); });
+function setMode(m) {
+  mode = m;
+  document.getElementById('btnCash').className = 'mode-btn' + (m === 'cash' ? ' active-cash' : '');
+  document.getElementById('btnBall').className = 'mode-btn' + (m === 'ball' ? ' active-ball' : '');
+  renderInput();
+}
+
+/* ── 全クリア ── */
+window.addEventListener('load', function() {
+  var clearBtn = document.getElementById('clearBtn');
+  if (clearBtn) onTap(clearBtn, function() {
+    if (records.length > 0 && !confirm('全記録をクリアしますか？')) return;
+    saveSnapshot();
+    records = []; prevKaiten = null; current = ''; started = false;
+    saveState();
+    renderAll();
+  });
+
+});
+
+function getVal() { return current === '' ? null : parseInt(current); }
+
+// 下2桁入力から実際の回転数を補完する
+// 例: prevKaiten=190, 入力"10" → 210
+function resolveKaiten(raw, prev) {
+  if (raw === null) return null;
+  if (prev === null) return raw; // スタート時はそのまま
+  if (raw >= 100) return raw;   // 3桁以上はそのまま
+  // 下2桁モード: prevの百の位を基準に補完
+  var base = Math.floor(prev / 100) * 100;
+  var candidate = base + raw;
+  // candidate が prev 以下なら繰り上げ
+  if (candidate <= prev) candidate += 100;
+  return candidate;
+}
+
+function startSession() {
+  saveSnapshot();
+  var v = getVal();
+  prevKaiten = (v === null) ? 0 : v;
+  current = ''; started = true;
+  saveState();
+  renderInput();
+}
+
+function confirm1000(isHit) {
+  saveSnapshot();
+  var v = resolveKaiten(getVal(), prevKaiten);
+  if (v === null) return;
+  if (v < prevKaiten) return;
+  var diff = v - prevKaiten;
+  records.push({ prev: prevKaiten, now: v, diff: diff, hit: isHit, mode: mode });
+  prevKaiten = isHit ? null : v;
+  if (isHit) started = false;
+  current = '';
+  saveState();
+  renderAll();
+}
+
+function deleteSeg(i) {
+  saveSnapshot();
+  records.splice(i, 1);
+  if (records.length === 0) { prevKaiten = null; started = false; }
+  saveState();
+  renderAll();
+}
+
+/* ── 入力エリア描画 ── */
+function renderInput() {
+  var v = getVal();
+  document.getElementById('dispVal').textContent = current === '' ? '0' : current;
+
+  var diffRow = document.getElementById('diffRow');
+  var hint = document.getElementById('cardHint');
+  var actionArea = document.getElementById('actionArea');
+  var isCash = mode === 'cash';
+  var cls = isCash ? 'cash' : 'ball';
+
+  diffRow.className = 'diff-row ' + cls;
+  document.getElementById('diffLabel').className = 'diff-label ' + cls;
+  document.getElementById('diffNum').className = 'diff-num ' + cls;
+  document.getElementById('diffUnit').className = 'diff-label ' + cls;
+
+  if (!started) {
+    hint.textContent = '打ち始める前の回転数を入力';
+    diffRow.style.visibility = 'hidden';
+    actionArea.innerHTML = '<button class="act-btn start-' + cls + '" id="startBtn">' + (isCash ? '💴' : '🎱') + ' この回転数からスタート</button>';
+    onTap(document.getElementById('startBtn'), startSession);
+  } else {
+    var rv = resolveKaiten(v, prevKaiten);
+    var diff = (rv !== null) ? rv - prevKaiten : null;
+    if (diff !== null && diff > 0) {
+      diffRow.style.visibility = 'visible';
+      document.getElementById('diffNum').textContent = diff;
+      document.getElementById('diffLabel').textContent = isCash ? 'この1,000円で' : '持ち球で';
+    } else {
+      diffRow.style.visibility = 'hidden';
+    }
+    var previewVal = rv !== null ? rv : '?';
+    hint.textContent = '前回 ' + prevKaiten + '回転 → ' + previewVal + '回転（' + (isCash ? '現金' : '持ち球') + '）';
+    actionArea.innerHTML =
+      '<div class="action-row">' +
+        '<button class="act-btn hit" id="hitBtn">当たり！</button>' +
+        '<button class="act-btn confirm-' + cls + '" id="confirmBtn">' + (isCash ? '💴 +1,000円' : '🎱 確定') + '</button>' +
+      '</div>';
+    onTap(document.getElementById('hitBtn'), function() { confirm1000(true); });
+    onTap(document.getElementById('confirmBtn'), function() { confirm1000(false); });
+  }
+}
+
+/* ── 全体描画 ── */
+function renderAll() {
+  renderInput();
+  var n = records.length;
+  var nc = records.filter(function(r) { return r.mode === 'cash'; }).length;
+
+  document.getElementById('stSeg').textContent = n + '回';
+  document.getElementById('stHit').textContent = records.filter(function(r) { return r.hit; }).length + '回';
+  document.getElementById('histTitle').textContent = n > 0 ? '記録履歴（' + n + '件）' : '記録履歴';
+
+  if (n === 0) {
+    var el = document.getElementById('totalAvg');
+    el.textContent = '—'; el.className = 'avg-value empty';
+    document.getElementById('stMoney').textContent = '—';
+    document.getElementById('stKaiten').textContent = '—';
+    document.getElementById('segList').innerHTML = '<div class="empty">記録がまだありません</div>';
+    return;
+  }
+
+  var totalDiff = records.reduce(function(s, r) { return s + r.diff; }, 0);
+  // 当たり以外のレコードで平均を計算
+  var normalRecs = records.filter(function(r) { return !r.hit; });
+  var normalDiff = normalRecs.reduce(function(s, r) { return s + r.diff; }, 0);
+  var el = document.getElementById('totalAvg');
+  if (normalRecs.length > 0) {
+    var avg = normalDiff / normalRecs.length;
+    el.textContent = avg.toFixed(1);
+    var diff = avg - border;
+    var cls;
+    if (diff < 0) cls = 'avg-blue';
+    else if (diff < 1) cls = 'avg-green';
+    else if (diff < 2) cls = 'avg-red';
+    else if (diff <= 2.5) cls = 'avg-gold';
+    else cls = 'avg-rainbow';
+    el.className = 'avg-value ' + cls;
+  } else {
+    el.textContent = '—'; el.className = 'avg-value empty';
+  }
+  document.getElementById('stMoney').textContent = nc > 0 ? (nc * 1000).toLocaleString() + '円' : '0円';
+  document.getElementById('stKaiten').textContent = totalDiff.toLocaleString() + '回';
+
+  var html = '';
+  for (var ri = 0; ri < records.length; ri++) {
+    var idx = records.length - 1 - ri;
+    var r = records[idx];
+    var isCash = r.mode === 'cash';
+    var badge = r.hit
+      ? '<span class="seg-badge badge-hit">当たり</span>'
+      : isCash
+        ? '<span class="seg-badge badge-cash">💴 現金</span>'
+        : '<span class="seg-badge badge-ball">🎱 持ち球</span>';
+    html += '<div class="seg-item">' +
+      badge +
+      '<div class="seg-body">' +
+        '<div class="seg-name">' + r.prev + '回転 → ' + r.now + '回転</div>' +
+        '<div class="seg-sub">' + (isCash ? '1,000円分' : '持ち球分') + '</div>' +
+      '</div>' +
+      '<div class="seg-diff">+' + r.diff + '回</div>' +
+    '</div>';
+  }
+  document.getElementById('segList').innerHTML = html;
+}
+
+/* ── ボーダー設定テンキー ── */
+var borderCurrent = '17.0';
+
+function renderBorder() {
+  document.getElementById('borderVal').textContent = borderCurrent || '0';
+  var v = parseFloat(borderCurrent);
+  border = isNaN(v) ? 17 : v;
+}
+
+/* bnk はHTML後方にあるので、設定画面コンテナへの委任で対応 */
+document.addEventListener('DOMContentLoaded', function() {});
+window.addEventListener('load', function() {
+  var container = document.getElementById('screenSettings');
+  container.addEventListener('touchstart', function(e) {
+    var btn = e.target.closest('.bnk');
+    if (!btn) return;
+    e.preventDefault();
+    btn._bnkCancelled = false;
+  }, { passive: false });
+  container.addEventListener('touchmove', function(e) {
+    var btn = e.target.closest('.bnk');
+    if (!btn) return;
+    var t = e.touches[0]; var r = btn.getBoundingClientRect();
+    if (t.clientX < r.left - 16 || t.clientX > r.right + 16 || t.clientY < r.top - 16 || t.clientY > r.bottom + 16) {
+      btn._bnkCancelled = true;
+    }
+  }, { passive: false });
+  container.addEventListener('touchend', function(e) {
+    var btn = e.target.closest('.bnk');
+    if (!btn) return;
+    e.preventDefault();
+    if (btn._bnkCancelled) return;
+    btn._bnkTouched = true;
+    handleBorderKey(btn.getAttribute('data-b'));
+  }, { passive: false });
+  container.addEventListener('click', function(e) {
+    var btn = e.target.closest('.bnk');
+    if (!btn) return;
+    if (btn._bnkTouched) { btn._bnkTouched = false; return; }
+    handleBorderKey(btn.getAttribute('data-b'));
+  });
+});
+
+function handleBorderKey(b) {
+  if (b === 'del') {
+    borderCurrent = borderCurrent.slice(0, -1);
+    if (borderCurrent === '' || borderCurrent === '-') borderCurrent = '';
+  } else if (b === '.') {
+    if (borderCurrent.indexOf('.') === -1) borderCurrent += '.';
+  } else {
+    if (borderCurrent.length >= 5) return;
+    borderCurrent += b;
+  }
+  renderBorder();
+  saveState();
+  renderAll();
+}
+/* clearStorageBtn はHTML後方 → window.loadで登録 */
+window.addEventListener('load', function() {
+  var clearBtn = document.getElementById('clearStorageBtn');
+  if (clearBtn) onTap(clearBtn, function() {
+    if (!confirm('保存データを全削除しますか？')) return;
+    try { localStorage.clear(); } catch(e) {}
+    records = []; undoStack = []; prevKaiten = null; current = ''; started = false; border = 17; borderCurrent = '17.0'; mode = 'cash';
+    document.getElementById('btnCash').className = 'mode-btn active-cash';
+    document.getElementById('btnBall').className = 'mode-btn';
+    renderBorder(); renderAll();
+  });
+});
+
+/* ── 起動時に保存データ読込 ── */
+loadState();
+document.getElementById('btnCash').className = 'mode-btn' + (mode === 'cash' ? ' active-cash' : '');
+document.getElementById('btnBall').className = 'mode-btn' + (mode === 'ball' ? ' active-ball' : '');
+borderCurrent = String(border);
+renderBorder();
+renderAll();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js').then(function(reg) {
+      console.log('SW registered');
+    }).catch(function(err) {
+      console.log('SW error', err);
+    });
+  });
+}
+</script>
+<!-- 設定タブ -->
+<div class="screen" id="screenSettings">
+  <div class="settings-card">
+    <div class="set-title">目標ボーダー設定</div>
+    <div class="set-desc">平均回転数がボーダー以上で緑、未満で赤になります</div>
+    <div class="border-display">
+      <span class="border-disp-val" id="borderVal">17.0</span>
+      <span class="border-disp-unit">回転</span>
+    </div>
+    <div class="border-numpad">
+      <button class="bnk" data-b="7">7</button>
+      <button class="bnk" data-b="8">8</button>
+      <button class="bnk" data-b="9">9</button>
+      <button class="bnk" data-b="4">4</button>
+      <button class="bnk" data-b="5">5</button>
+      <button class="bnk" data-b="6">6</button>
+      <button class="bnk" data-b="1">1</button>
+      <button class="bnk" data-b="2">2</button>
+      <button class="bnk" data-b="3">3</button>
+      <button class="bnk dot" data-b=".">.</button>
+      <button class="bnk zero" data-b="0">0</button>
+      <button class="bnk del" data-b="del">⌫</button>
+    </div>
+  </div>
+
+  <div class="settings-card">
+    <div class="set-title">データ管理</div>
+    <div class="set-desc">記録はこのデバイスに自動保存されます</div>
+    <button class="danger-btn" id="clearStorageBtn">保存データを全削除</button>
+  </div>
+</div>
+</body>
+</html>
